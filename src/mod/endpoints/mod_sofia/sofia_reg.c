@@ -566,6 +566,9 @@ int sofia_reg_nat_callback(void *pArg, int argc, char **argv, char **columnNames
 	char to[512] = "", call_id[512] = "";
 	sofia_destination_t *dst = NULL;
 	switch_uuid_t uuid;
+    char *route_uri = NULL;
+
+	switch_snprintf(to, sizeof(to), "sip:%s@%s", argv[1], argv[2]);
 
 	switch_snprintf(to, sizeof(to), "sip:%s@%s", argv[1], argv[2]);
 
@@ -578,15 +581,17 @@ int sofia_reg_nat_callback(void *pArg, int argc, char **argv, char **columnNames
 	dst = sofia_glue_get_destination(argv[3]);
 	switch_assert(dst);
 	
+	if (dst->route_uri) {
+		route_uri = sofia_glue_strip_uri(dst->route_uri);
+	}
+
 	nh = nua_handle(profile->nua, NULL, SIPTAG_FROM_STR(profile->url), SIPTAG_TO_STR(to), NUTAG_URL(dst->contact), SIPTAG_CONTACT_STR(profile->url),
 					SIPTAG_CALL_ID_STR(call_id), TAG_END());
 	nua_handle_bind(nh, &mod_sofia_globals.destroy_private);
-	nua_options(nh, 
-				NTATAG_SIP_T2(5000),
-				NTATAG_SIP_T4(10000),
-				TAG_IF(dst->route_uri, NUTAG_PROXY(dst->route_uri)), TAG_IF(dst->route, SIPTAG_ROUTE_STR(dst->route)), TAG_END());
+	nua_options(nh, NTATAG_SIP_T2(5000), NTATAG_SIP_T4(10000), TAG_IF(route_uri, NUTAG_PROXY(route_uri)), TAG_IF(dst->route, SIPTAG_ROUTE_STR(dst->route)), TAG_END());
 
 	sofia_glue_free_destination(dst);
+    switch_safe_free(route_uri);
 
 	return 0;
 }
@@ -1091,7 +1096,6 @@ uint8_t sofia_reg_handle_register(nua_t *nua, sofia_profile_t *profile, nua_hand
 	uint8_t stale = 0, forbidden = 0;
 	auth_res_t auth_res = AUTH_OK;
 	long exptime = 300;
-	switch_event_t *event;
 	const char *rpid = "unknown";
 	const char *display = "\"user\"";
 	char network_ip[80];
@@ -1453,7 +1457,7 @@ uint8_t sofia_reg_handle_register(nua_t *nua, sofia_profile_t *profile, nua_hand
 
 		if (auth_res != AUTH_OK && auth_res != AUTH_RENEWED && !stale) {
 			if (auth_res == AUTH_FORBIDDEN) {
-				nua_respond(nh, SIP_403_FORBIDDEN, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
+				nua_respond(nh, SIP_503_SERVICE_UNAVAILABLE, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 				forbidden = 1;
 			} else {
 				nua_respond(nh, SIP_401_UNAUTHORIZED, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
@@ -1691,28 +1695,6 @@ uint8_t sofia_reg_handle_register(nua_t *nua, sofia_profile_t *profile, nua_hand
 		}
 
 	} else {
-		int send = 1;
-
-		if (multi_reg) {
-			if (sofia_reg_reg_count(profile, to_user, sub_host) > 0) {
-				send = 0;
-			}
-		}
-
-		if (send && switch_event_create(&event, SWITCH_EVENT_PRESENCE_IN) == SWITCH_STATUS_SUCCESS) {
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", SOFIA_CHAT_PROTO);
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "rpid", rpid);
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "login", profile->url);
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "user-agent",
-										   (sip && sip->sip_user_agent) ? sip->sip_user_agent->g_string : "unknown");
-			switch_event_add_header(event, SWITCH_STACK_BOTTOM, "from", "%s@%s", to_user, sub_host);
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "status", "Unregistered");
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "presence-source", "register");
-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event_type", "presence");
-			switch_event_fire(&event);
-		}
-		
-
 		if (multi_reg) {
 			char *icontact, *p;
 			icontact = sofia_glue_get_url_from_contact(contact_str, 1);
@@ -1769,6 +1751,7 @@ uint8_t sofia_reg_handle_register(nua_t *nua, sofia_profile_t *profile, nua_hand
 						switch_event_add_header(s_mwi_event, SWITCH_STACK_BOTTOM, "Message-Account", "sip:%s@%s", mwi_user, mwi_host);
 						switch_event_add_header_string(s_mwi_event, SWITCH_STACK_BOTTOM, "VM-Sofia-Profile", profile->name);
 						switch_event_add_header_string(s_mwi_event, SWITCH_STACK_BOTTOM, "VM-Call-ID", call_id);
+						switch_event_add_header(s_mwi_event, SWITCH_STACK_BOTTOM, "VM-User", "%s@%s", to_user, reg_host);
 					}
 				}
 
@@ -1787,16 +1770,6 @@ uint8_t sofia_reg_handle_register(nua_t *nua, sofia_profile_t *profile, nua_hand
 							switch_event_add_header_string(s_event, SWITCH_STACK_BOTTOM, "alt_event_type", "dialog");
 							switch_event_fire(&s_event);
 						}
-					} else {
-						if (switch_event_create(&s_event, SWITCH_EVENT_PRESENCE_IN) == SWITCH_STATUS_SUCCESS) {
-							switch_event_add_header_string(s_event, SWITCH_STACK_BOTTOM, "proto", SOFIA_CHAT_PROTO);
-							switch_event_add_header_string(s_event, SWITCH_STACK_BOTTOM, "login", profile->name);
-							switch_event_add_header_string(s_event, SWITCH_STACK_BOTTOM, "presence-source", "register");
-							switch_event_add_header(s_event, SWITCH_STACK_BOTTOM, "from", "%s@%s", to_user, sub_host);
-							switch_event_add_header_string(s_event, SWITCH_STACK_BOTTOM, "rpid", "unknown");
-							switch_event_add_header_string(s_event, SWITCH_STACK_BOTTOM, "status", "Registered");
-							switch_event_fire(&s_event);
-						}		
 					}
 				}
 			} else {
@@ -1920,7 +1893,7 @@ void sofia_reg_handle_sip_i_register(nua_t *nua, sofia_profile_t *profile, nua_h
 	}
 
 	if (!(profile->mflags & MFLAG_REGISTER)) {
-		nua_respond(nh, SIP_403_FORBIDDEN, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
+		nua_respond(nh, SIP_503_SERVICE_UNAVAILABLE, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 		goto end;
 	}
 
@@ -1984,7 +1957,7 @@ void sofia_reg_handle_sip_i_register(nua_t *nua, sofia_profile_t *profile, nua_h
 			type = REG_AUTO_REGISTER;
 		} else if (!ok) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "IP %s Rejected by register acl \"%s\"\n", network_ip, profile->reg_acl[x]);
-			nua_respond(nh, SIP_403_FORBIDDEN, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
+			nua_respond(nh, SIP_503_SERVICE_UNAVAILABLE, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 			goto end;
 		}
 	}

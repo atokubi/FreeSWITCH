@@ -5682,7 +5682,7 @@ static void sofia_handle_sip_i_state(switch_core_session_t *session, int status,
 
 	if (channel && (status == 180 || status == 183) && switch_channel_direction(channel) == SWITCH_CALL_DIRECTION_OUTBOUND) {
 		const char *val;
-		if ((val = switch_channel_get_variable(channel, "sip_auto_answer")) && switch_true(val)) {
+		if ((val = switch_channel_get_variable(channel, "sip_auto_answer_notify")) && switch_true(val)) {
 			nua_notify(nh, NUTAG_NEWSUB(1), NUTAG_WITH_THIS_MSG(de->data->e_msg), 
 					   NUTAG_SUBSTATE(nua_substate_terminated),SIPTAG_SUBSCRIPTION_STATE_STR("terminated;reason=noresource"), SIPTAG_EVENT_STR("talk"), TAG_END());
 		}
@@ -6792,6 +6792,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 								switch_channel_t *a_channel = switch_core_session_get_channel(a_session);
 								switch_caller_profile_t *prof = switch_channel_get_caller_profile(channel_b);
 								const char *tmp;
+                                switch_event_t *event = NULL;
 
 								switch_core_event_hook_add_state_change(a_session, xfer_hanguphook);
 								switch_channel_set_variable(a_channel, "att_xfer_kill_uuid", switch_core_session_get_uuid(b_session));
@@ -6810,6 +6811,19 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 
 								if (!zstr(moh) && !strcasecmp(moh, "silence")) {
 									moh = NULL;
+								}
+
+								if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REFER_TRANSFER) == SWITCH_STATUS_SUCCESS) {
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferee-UUID", br_a);
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-UUID", switch_channel_get_uuid(channel_a));
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-Direction", switch_channel_direction(channel_a) == SWITCH_CALL_DIRECTION_OUTBOUND ? "outbound" : "inbound");
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Type", "SEMI_TRANSFER");
+									switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Refer", "%s@%s", exten, (char *) refer_to->r_url->url_host);
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Replaces", rep);
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Bridge-With", br_b);
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_SIP_HEADER_PREFIX "Referred-By", full_ref_by);
+									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_REFER_TO_VARIABLE, full_ref_to);
+									switch_event_fire(&event);
 								}
 
 								if (moh) {
@@ -6848,6 +6862,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 
 						} else if (br_a && br_b) {
 							switch_core_session_t *tmp = NULL;
+                                                       switch_event_t *event = NULL;
 
 							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Attended Transfer [%s][%s]\n",
 											  switch_str_nil(br_a), switch_str_nil(br_b));
@@ -6890,7 +6905,21 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 							
 							mark_transfer_record(session, br_a, br_b);
 							
-							switch_ivr_uuid_bridge(br_a, br_b);
+                            if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REFER_TRANSFER) == SWITCH_STATUS_SUCCESS) {
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferee-UUID", br_a);
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-UUID", switch_channel_get_uuid(channel_a));
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-Direction", switch_channel_direction(channel_a) == SWITCH_CALL_DIRECTION_OUTBOUND ? "outbound" : "inbound");
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Type", "ATTENDED_TRANSFER");
+                                switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Refer", "%s@%s", exten, (char *) refer_to->r_url->url_host);
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Replaces", rep);
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Bridge-With", br_b);
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_SIP_HEADER_PREFIX "Referred-By", full_ref_by);
+                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_REFER_TO_VARIABLE, full_ref_to);
+                                switch_event_fire(&event);
+                            }
+
+							switch_ivr_uuid_bridge(br_b, br_a);
+
 							switch_channel_set_variable(channel_b, SWITCH_ENDPOINT_DISPOSITION_VARIABLE, "ATTENDED_TRANSFER");
 							nua_notify(tech_pvt->nh, NUTAG_NEWSUB(1), SIPTAG_CONTENT_TYPE_STR("message/sipfrag;version=2.0"),
 									   NUTAG_SUBSTATE(nua_substate_terminated),SIPTAG_SUBSCRIPTION_STATE_STR("terminated;reason=noresource"), SIPTAG_PAYLOAD_STR("SIP/2.0 200 OK\r\n"), SIPTAG_EVENT_STR(etmp),
@@ -6912,6 +6941,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 							} else {
 								switch_core_session_t *t_session, *hup_session;
 								switch_channel_t *hup_channel;
+                                switch_event_t *event = NULL;
 								const char *ext;
 
 								if (br_a && !br_b) {
@@ -6947,6 +6977,18 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 									if (switch_true(switch_channel_get_variable(hup_channel, "recording_follow_transfer"))) {
 										switch_core_media_bug_transfer_recordings(hup_session, t_session);
 									}
+
+                                    if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REFER_TRANSFER) == SWITCH_STATUS_SUCCESS) {
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferee-UUID", switch_channel_get_uuid(t_channel));
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-UUID", switch_channel_get_uuid(channel_a));
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-Direction", switch_channel_direction(channel_a) == SWITCH_CALL_DIRECTION_OUTBOUND ? "outbound" : "inbound");
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Type", "BLIND_TRANSFER");
+                                        switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Refer", "%s@%s", exten, (char *) refer_to->r_url->url_host);
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Replaces", rep);
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_SIP_HEADER_PREFIX "Referred-By", full_ref_by);
+                                        switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_REFER_TO_VARIABLE, full_ref_to);
+                                        switch_event_fire(&event);
+                                    }
 
 									if (idest) {
 										switch_ivr_session_transfer(t_session, idest, "inline", NULL);
@@ -7103,6 +7145,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 		if (!zstr(br) && (b_session = switch_core_session_locate(br))) {
 			const char *var;
 			switch_channel_t *b_channel = switch_core_session_get_channel(b_session);
+            switch_event_t *event = NULL;
 
 			switch_channel_set_variable(channel, "transfer_fallback_extension", from->a_user);
 			if (!zstr(full_ref_by)) {
@@ -7134,6 +7177,17 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 						   NUTAG_SUBSTATE(nua_substate_terminated),
 						   SIPTAG_SUBSCRIPTION_STATE_STR("terminated;reason=noresource"), 
 						   SIPTAG_PAYLOAD_STR("SIP/2.0 200 OK\r\n"), SIPTAG_EVENT_STR(etmp), TAG_END());
+			}
+
+			if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REFER_TRANSFER) == SWITCH_STATUS_SUCCESS) {
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferee-UUID", br);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-UUID", switch_channel_get_uuid(channel_a));
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Transferor-Direction", switch_channel_direction(channel_a) == SWITCH_CALL_DIRECTION_OUTBOUND ? "outbound" : "inbound");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Type", "BLIND_TRANSFER");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Refer", exten);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_SIP_HEADER_PREFIX "Referred-By", full_ref_by);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, SOFIA_REFER_TO_VARIABLE, full_ref_to);
+				switch_event_fire(&event);
 			}
 			
 			switch_ivr_session_transfer(b_session, exten, NULL, NULL);

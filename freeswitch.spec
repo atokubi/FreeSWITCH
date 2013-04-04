@@ -939,11 +939,21 @@ SQLite CDR Logger for FreeSWITCH.
 Summary:	Erlang Event Module for the FreeSWITCH open source telephony platform
 Group:		System/Libraries
 Requires:	 %{name} = %{version}-%{release}
-Requires:	erlang
-BuildRequires:	erlang
+Requires:	esl-erlang
+BuildRequires:	esl-erlang
 
 %description event-erlang-event
 Erlang Event Module for FreeSWITCH.
+
+%package event-kazoo
+Summary:	Alternative Erlang Event Module for the FreeSWITCH open source telephony platform
+Group:		System/Libraries
+Requires:	 %{name} = %{version}-%{release}
+Requires:	esl-erlang
+BuildRequires:	esl-erlang
+
+%description event-kazoo
+Alternative Erlang Event Module for FreeSWITCH.
 
 %package event-multicast
 Summary:	Multicast Event System for the FreeSWITCH open source telephony platform
@@ -1116,22 +1126,6 @@ Group:          System/Libraries
 Requires:        %{name} = %{version}-%{release}
 
 %description lang-he
-Hebrew language phrases module and directory structure for say module and voicemail
-
-%package lang-es
-Summary:        Provides Spanish language dependend modules and speech config for the FreeSWITCH Open Source telephone platform.
-Group:          System/Libraries
-Requires:        %{name} = %{version}-%{release}
-
-%description lang-es
-Spanish language phrases module and directory structure for say module and voicemail
-
-%package lang-pt
-Summary:        Provides Portugese language dependend modules and speech config for the FreeSWITCH Open Source telephone platform.
-Group:          System/Libraries
-Requires:        %{name} = %{version}-%{release}
-
-%description lang-pt
 Hebrew language phrases module and directory structure for say module and voicemail
 
 ######################################################################################################################
@@ -1366,7 +1360,7 @@ ENDPOINTS_MODULES="endpoints/mod_dingaling ../../libs/freetdm/mod_freetdm \
 #
 ######################################################################################################################
 EVENT_HANDLERS_MODULES="event_handlers/mod_cdr_csv event_handlers/mod_cdr_pg_csv event_handlers/mod_cdr_sqlite \
-			event_handlers/mod_cdr_mongodb event_handlers/mod_erlang_event event_handlers/mod_event_multicast \
+			event_handlers/mod_cdr_mongodb event_handlers/mod_kazoo event_handlers/mod_erlang_event event_handlers/mod_event_multicast \
 			event_handlers/mod_event_socket event_handlers/mod_json_cdr \
 			event_handlers/mod_snmp"
 
@@ -1749,7 +1743,6 @@ fi
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/mongo.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/nibblebill.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/opal.conf.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/oreka.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/osp.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/pocketsphinx.conf.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/autoload_configs/portaudio.conf.xml
@@ -2165,6 +2158,10 @@ fi
 %defattr(-, freeswitch, daemon)
 %{MODINSTDIR}/mod_erlang_event.so*
 
+%files event-kazoo
+%defattr(-, freeswitch, daemon)
+%{MODINSTDIR}/mod_kazoo.so*
+
 %files event-multicast
 %defattr(-, freeswitch, daemon)
 %{MODINSTDIR}/mod_event_multicast.so*
@@ -2312,30 +2309,6 @@ fi
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/he/vm/*.xml
 %config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/he/dir/*.xml
 %{MODINSTDIR}/mod_say_he.so*
-
-%files lang-es
-%defattr(-, freeswitch, daemon)
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/es
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/es/demo
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/es/vm
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/es/dir
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/es/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/es/demo/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/es/vm/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/es/dir/*.xml
-%{MODINSTDIR}/mod_say_en.so*
-
-%files lang-pt
-%defattr(-, freeswitch, daemon)
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/pt
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/pt/demo
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/pt/vm
-%dir %attr(0750, freeswitch, daemon) %{sysconfdir}/lang/pt/dir
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/pt/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/pt/demo/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/pt/vm/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{sysconfdir}/lang/pt/dir/*.xml
-%{MODINSTDIR}/mod_say_en.so*
 
 ######################################################################################################################
 #
@@ -2530,4 +2503,3 @@ fi
 - Added devel package
 * Thu Mar 15 2007 - peter+rpmspam@suntel.com.tr
 - Initial RPM release
-

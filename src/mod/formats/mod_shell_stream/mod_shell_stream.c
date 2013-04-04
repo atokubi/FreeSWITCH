@@ -74,7 +74,9 @@ static void *SWITCH_THREAD_FUNC buffer_thread_run(switch_thread_t *thread, void 
 		}
 
 		switch_mutex_lock(context->mutex);
-		switch_buffer_write(context->audio_buffer, data, rlen);
+		if (context->audio_buffer) {
+			switch_buffer_write(context->audio_buffer, data, rlen);
+		}
 		switch_mutex_unlock(context->mutex);
 	}
 

@@ -1007,6 +1007,7 @@ static switch_status_t loopback_bowout_on_execute_state_handler(switch_core_sess
 		const char *uuid;
 		switch_core_session_t *other_session = NULL;
 		switch_channel_t *b_channel = NULL;
+		switch_event_t *event = NULL;
 
 		tech_pvt = switch_core_session_get_private(session);
 
@@ -1033,6 +1034,13 @@ static switch_status_t loopback_bowout_on_execute_state_handler(switch_core_sess
 					clone->originatee_caller_profile = NULL;
 					switch_channel_set_caller_profile(other_channel, clone);
 				}
+
+                if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, "loopback::bowout") == SWITCH_STATUS_SUCCESS) {
+                    switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Resigning-UUID", switch_channel_get_uuid(channel));
+                    switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Acquired-UUID", switch_channel_get_uuid(other_channel));
+			        switch_channel_event_set_data(b_channel, event);
+                    switch_event_fire(&event);
+                }
 
 				switch_channel_caller_extension_masquerade(channel, other_channel, 0);
 				switch_channel_set_state(other_channel, CS_RESET);

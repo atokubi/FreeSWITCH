@@ -62,6 +62,8 @@ static void *SWITCH_THREAD_FUNC api_exec(switch_thread_t *thread, void *obj)
 
 	SWITCH_STANDARD_STREAM(stream);
 
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|00000000000|running API command %s %s\n", acs->api_cmd, acs->arg);
+
 	if ((status = switch_api_execute(acs->api_cmd, acs->arg, NULL, &stream)) == SWITCH_STATUS_SUCCESS) {
 		reply = stream.data;
 	} else {
@@ -771,6 +773,53 @@ static switch_status_t handle_msg_sendevent(listener_t *listener, int arity, ei_
 	return SWITCH_STATUS_SUCCESS;
 }
 
+void switch_log_sendmsg(switch_core_session_t *session, switch_event_t *event)
+{
+	char *cmd = switch_event_get_header(event, "call-command");
+	char *uuid = switch_core_session_get_uuid(session);
+	unsigned long cmd_hash;
+	switch_ssize_t hlen = -1;
+	unsigned long CMD_EXECUTE = switch_hashfunc_default("execute", &hlen);
+	unsigned long CMD_XFEREXT = switch_hashfunc_default("xferext", &hlen);
+//	unsigned long CMD_HANGUP = switch_hashfunc_default("hangup", &hlen);
+//	unsigned long CMD_NOMEDIA = switch_hashfunc_default("nomedia", &hlen);
+//	unsigned long CMD_UNICAST = switch_hashfunc_default("unicast", &hlen);
+
+	if (zstr(cmd)) {
+		return;
+	}
+
+	cmd_hash = switch_hashfunc_default(cmd, &hlen);
+	
+	if (cmd_hash == CMD_EXECUTE) {
+		char *app_name = switch_event_get_header(event, "execute-app-name");
+		char *app_arg = switch_event_get_header(event, "execute-app-arg");
+		
+		if(app_name) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|executing %s %s \n", uuid, app_name, switch_str_nil(app_arg));
+		}
+	} else if (cmd_hash == CMD_XFEREXT) {
+		switch_event_header_t *hp;
+	
+		for (hp = event->headers; hp; hp = hp->next) {
+			char *app_name;
+			char *app_arg;
+			
+			if (!strcasecmp(hp->name, "application")) {
+				app_name = strdup(hp->value);
+				app_arg = strchr(app_name, ' ');
+			
+				if (app_arg) {
+					*app_arg++ = '\0';
+				}
+			
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|building xferext extension: %s %s\n", uuid, app_name, app_arg);
+			}
+		}		
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|transfered call to xferext extension\n", uuid);
+	}
+}
+
 static switch_status_t handle_msg_sendmsg(listener_t *listener, int arity, ei_x_buff * buf, ei_x_buff * rbuf)
 {
 	char uuid[SWITCH_UUID_FORMATTED_LENGTH + 1];
@@ -815,6 +864,7 @@ static switch_status_t handle_msg_sendmsg(listener_t *listener, int arity, ei_x_
 						switch_event_add_header_string(event, SWITCH_STACK_BOTTOM | SWITCH_STACK_NODUP, key, value);
 					}
 				}
+				switch_log_sendmsg(session, event);
 
 				if (headerlength != i || fail) {
 					ei_x_encode_tuple_header(rbuf, 2);

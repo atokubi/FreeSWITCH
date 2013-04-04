@@ -519,6 +519,10 @@ switch_status_t sofia_on_hangup(switch_core_session_t *session)
 		switch_core_session_rwunlock(a_session);
 	}
 
+       if (switch_true(switch_channel_get_variable(channel, "channel_is_moving"))) {
+               goto done;
+       }
+
 	if (sofia_test_pflag(tech_pvt->profile, PFLAG_DESTROY)) {
 		sofia_set_flag(tech_pvt, TFLAG_BYE);
 	} else if (tech_pvt->nh && !sofia_test_flag(tech_pvt, TFLAG_BYE)) {
@@ -670,6 +674,8 @@ switch_status_t sofia_on_hangup(switch_core_session_t *session)
 
 
 	sofia_glue_set_rtp_stats(tech_pvt);
+
+done:
 
 	switch_mutex_unlock(tech_pvt->sofia_mutex);
 
@@ -3391,6 +3397,26 @@ static void xml_gateway_status(sofia_gateway_t *gp, switch_stream_handle_t *stre
 	stream->write_function(stream, "    <calls-out>%u</calls-out>\n", gp->ob_calls);
 	stream->write_function(stream, "    <failed-calls-in>%u</failed-calls-in>\n", gp->ib_failed_calls);
 	stream->write_function(stream, "    <failed-calls-out>%u</failed-calls-out>\n", gp->ob_failed_calls);
+
+	if (gp->ib_vars) {
+	  switch_event_header_t *hp;
+
+      stream->write_function(stream, "      <inbound-variables>\n");
+	  for (hp = gp->ib_vars->headers; hp; hp = hp->next) {
+		stream->write_function(stream, "        <variable name=\"%s\" value=\"%s\" />\n", hp->name, hp->value);
+	  }
+      stream->write_function(stream, "      </inbound-variables>\n");
+	}
+
+	if (gp->ob_vars) {
+	  switch_event_header_t *hp;
+
+      stream->write_function(stream, "      <outbound-variables>\n");
+	  for (hp = gp->ob_vars->headers; hp; hp = hp->next) {
+		stream->write_function(stream, "        <variable name=\"%s\" value=\"%s\" />\n", hp->name, hp->value);
+	  }
+      stream->write_function(stream, "      </outbound-variables>\n");
+	}
 
 	if (gp->state == REG_STATE_FAILED || gp->state == REG_STATE_TRYING) {
 		time_t now = switch_epoch_time_now(NULL);

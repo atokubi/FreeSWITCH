@@ -269,7 +269,7 @@ static switch_status_t http_put(url_cache_t *cache, switch_core_session_t *sessi
 	switch_curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &httpRes);
 	switch_curl_easy_cleanup(curl_handle);
 
-	if (httpRes == 200 || httpRes == 201 || httpRes == 204) {
+	if (httpRes == 200 || httpRes == 201 || httpRes == 202 || httpRes == 204) {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s saved to %s\n", filename, url);
 	} else {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Received HTTP error %ld trying to save %s to %s\n", httpRes, filename, url);

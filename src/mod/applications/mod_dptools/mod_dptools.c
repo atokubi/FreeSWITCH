@@ -2619,12 +2619,16 @@ SWITCH_STANDARD_APP(playback_function)
 
 SWITCH_STANDARD_APP(endless_playback_function)
 {
+	switch_input_args_t args = { 0 };
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 	const char *file = data;
 
+	args.input_callback = on_dtmf;
+
 	while (switch_channel_ready(channel)) {
-		status = switch_ivr_play_file(session, NULL, file, NULL);
+		switch_channel_set_variable(channel, SWITCH_PLAYBACK_TERMINATORS_VARIABLE, "none");
+		status = switch_ivr_play_file(session, NULL, file, &args);
 
 		if (status != SWITCH_STATUS_SUCCESS && status != SWITCH_STATUS_BREAK) {
 			break;
